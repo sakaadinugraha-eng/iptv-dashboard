@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import VideoPlayer from "./VideoPlayer";
-import { TVChannel } from ".././lib/iptv";
+import { TVChannel } from "./../lib/iptv";
+import EpgPanel from "./EpgPanel";
 
 const FILTER_PRESETS = [
   { label: "All Channels", value: "All" },
+  { label: "My Favorites", value: "Favorites" }, 
   { label: "Indonesia Only", value: "Indonesia" },
+  { label: "Regional / Local", value: "Regional" },
   { label: "Sports Channels", value: "Sports" },
   { label: "Kids Channels", value: "Kids" }
 ];
@@ -22,69 +25,117 @@ export default function Dashboard({ initialChannels }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [selectedPreset, setSelectedPreset] = useState<string>("All");
+  const [selectedLanguage, setSelectedLanguage] = useState<string>("All"); 
 
-  const categories = useMemo(() => {
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [isMounted, setIsMounted] = useState<boolean>(false);
+  
+  const [visibleCount, setVisibleCount] = useState<number>(100);
+
+  useEffect(() => {
+    setIsMounted(true);
+    const savedFavorites = localStorage.getItem("iptv_favorites");
+    if (savedFavorites) {
+      try { setFavorites(JSON.parse(savedFavorites)); } catch (e) {}
+    }
+  }, []);
+
+  useEffect(() => {
+    setVisibleCount(100);
+  }, [searchQuery, selectedCategory, selectedPreset, selectedLanguage]);
+
+  const toggleFavorite = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    let newFavorites = favorites.includes(id) ? favorites.filter((favId) => favId !== id) : [...favorites, id];
+    setFavorites(newFavorites);
+    localStorage.setItem("iptv_favorites", JSON.stringify(newFavorites));
+  };
+
+  const languagesList = useMemo(() => {
     const set = new Set<string>();
     initialChannels.forEach((channel) => {
-      if (channel.category) set.add(channel.category);
+      if (Array.isArray(channel.languages)) {
+        channel.languages.forEach((lang) => {
+          if (lang && lang !== "Unknown") set.add(lang);
+        });
+      }
     });
     return ["All", ...Array.from(set).sort()];
   }, [initialChannels]);
 
+  const categoriesMap = useMemo(() => {
+    const map = new Map<string, string | null>();
+    initialChannels.forEach((channel) => {
+      if (channel.category && !map.has(channel.category)) {
+        map.set(channel.category, channel.categoryDescription);
+      }
+    });
+    const sortedKeys = Array.from(map.keys()).sort();
+    return [{ name: "All", description: "Show all channels" }, ...sortedKeys.map(key => ({ name: key, description: map.get(key) }))];
+  }, [initialChannels]);
+
   const filteredChannels = useMemo(() => {
     return initialChannels.filter((channel) => {
-      if (channel.name.toUpperCase().startsWith("[DANA KHUSUS]")) {
-        return false;
-      }
+      if (channel.name.toUpperCase().startsWith("[DANA KHUSUS]")) return false;
 
       const matchesSearch = channel.name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = selectedCategory === "All" || channel.category === selectedCategory;
+      const matchesLanguage = selectedLanguage === "All" || channel.languages.includes(selectedLanguage);
 
       let matchesPreset = true;
-      if (selectedPreset === "Indonesia") {
-        matchesPreset = channel.country === "ID"; 
-      } else if (selectedPreset === "Sports") {
-        matchesPreset = channel.category.toLowerCase() === "sports";
-      } else if (selectedPreset === "Kids") {
-        matchesPreset = channel.category.toLowerCase() === "kids";
-      }
+      if (selectedPreset === "Indonesia") matchesPreset = channel.country === "ID";
+      else if (selectedPreset === "Regional") matchesPreset = channel.subdivision !== null; 
+      else if (selectedPreset === "Sports") matchesPreset = channel.category.toLowerCase() === "sports";
+      else if (selectedPreset === "Kids") matchesPreset = channel.category.toLowerCase() === "kids";
+      else if (selectedPreset === "Favorites") matchesPreset = favorites.includes(channel.id);
 
-      return matchesSearch && matchesCategory && matchesPreset;
+      return matchesSearch && matchesCategory && matchesPreset && matchesLanguage;
     });
-  }, [initialChannels, searchQuery, selectedCategory, selectedPreset]);
+  }, [initialChannels, searchQuery, selectedCategory, selectedPreset, selectedLanguage, favorites]);
 
-  const displayChannels = filteredChannels.slice(0, 100);
+  const displayChannels = filteredChannels.slice(0, visibleCount);
+  const hasMoreChannels = visibleCount < filteredChannels.length;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-100 text-slate-900 font-sans">
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-100 font-sans text-black">
       
-      <aside className="w-85 bg-white border-r border-slate-200 flex flex-col h-full min-w-[21rem]">
+      <aside className="w-85 bg-white border-r border-slate-200 flex flex-col h-full min-w-[22rem]">
         <div className="p-5 border-b border-slate-200 bg-white space-y-3 shrink-0">
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-brand-indigo">
+            <h1 className="text-xl font-bold tracking-tight text-black">
               IPTV Player Pro
             </h1>
             <p className="text-xs text-slate-500 mt-1 font-medium">
-              Showing {filteredChannels.length} Channels
+              Showing {displayChannels.length} of {filteredChannels.length} Channels
             </p>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Quick Filter</label>
-            <select
-              value={selectedPreset}
-              onChange={(e) => {
-                setSelectedPreset(e.target.value);
-                setSelectedCategory("All"); 
-              }}
-              className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-brand-indigo transition-all cursor-pointer"
-            >
-              {FILTER_PRESETS.map((preset) => (
-                <option key={preset.value} value={preset.value}>
-                  {preset.label}
-                </option>
-              ))}
-            </select>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Quick Filter</label>
+              <select
+                value={selectedPreset}
+                onChange={(e) => { setSelectedPreset(e.target.value); setSelectedCategory("All"); }}
+                className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 cursor-pointer truncate"
+              >
+                {FILTER_PRESETS.map((preset) => (
+                  <option key={preset.value} value={preset.value}>{preset.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Language</label>
+              <select
+                value={selectedLanguage}
+                onChange={(e) => setSelectedLanguage(e.target.value)}
+                className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 cursor-pointer truncate"
+              >
+                {languagesList.map((lang) => (
+                  <option key={lang} value={lang}>{lang}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="relative">
@@ -93,22 +144,23 @@ export default function Dashboard({ initialChannels }: DashboardProps) {
               placeholder="Search channel..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-3 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-brand-indigo focus:ring-1 focus:ring-brand-indigo transition-all"
+              className="w-full pl-3 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all text-black"
             />
           </div>
 
           <div className="flex gap-1.5 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
-            {categories.map((category) => {
-              const isCatActive = selectedCategory === category;
+            {categoriesMap.map((cat) => {
+              const isCatActive = selectedCategory === cat.name;
               return (
                 <button
-                  key={category}
-                  onClick={() => setSelectedCategory(category)}
+                  key={cat.name}
+                  onClick={() => setSelectedCategory(cat.name)}
+                  title={cat.description || "No description available"} // Tampilan Tooltip
                   className={`text-[11px] font-semibold px-3 py-1 rounded-full whitespace-nowrap cursor-pointer transition-all ${
-                    isCatActive ? "bg-brand-violet text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    isCatActive ? "bg-black text-white shadow-sm" : "bg-slate-100 text-black hover:bg-slate-200"
                   }`}
                 >
-                  {category}
+                  {cat.name}
                 </button>
               );
             })}
@@ -117,32 +169,99 @@ export default function Dashboard({ initialChannels }: DashboardProps) {
         
         <div className="flex-grow overflow-y-auto p-4 space-y-2 bg-slate-50">
           {displayChannels.length > 0 ? (
-            displayChannels.map((channel) => {
-              const isActive = activeChannel?.id === channel.id;
-              return (
-                <div 
-                  key={channel.id} 
-                  onClick={() => setActiveChannel(channel)}
-                  className={`flex flex-col p-3 rounded-xl border cursor-pointer transition-all ${
-                    isActive 
-                      ? "bg-brand-indigo text-white border-brand-indigo shadow-md shadow-indigo-100" 
-                      : "bg-white border-slate-200 hover:border-brand-indigo hover:bg-indigo-50/10"
-                  }`}
-                >
-                  <span className="font-semibold text-sm truncate">{channel.name}</span>
-                  <div className="flex justify-between items-center mt-2 pointer-events-none">
-                    <span className={`text-[10px] px-2 py-0.5 rounded font-medium ${
-                      isActive ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-600"
-                    }`}>
-                      {channel.category}
-                    </span>
-                    <span className={`text-[10px] uppercase font-bold tracking-wider ${isActive ? "text-indigo-200" : "text-slate-400"}`}>
-                      {channel.country}
-                    </span>
+            <>
+              {displayChannels.map((channel) => {
+                const isActive = activeChannel?.id === channel.id;
+                const isFavorite = favorites.includes(channel.id);
+                
+                return (
+                  <div 
+                    key={channel.id} 
+                    onClick={() => setActiveChannel(channel)}
+                    className={`flex flex-col p-3 rounded-xl border cursor-pointer transition-all ${
+                      isActive 
+                        ? "bg-slate-200 text-black border-slate-400 shadow-sm" 
+                        : "bg-white border-slate-200 hover:border-slate-400"
+                    }`}
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex items-center gap-2.5 overflow-hidden">
+                        {channel.logo ? (
+                          <img 
+                            src={channel.logo} 
+                            alt={channel.name} 
+                            className="w-8 h-8 object-contain bg-white rounded shadow-sm shrink-0"
+                            onError={(e) => e.currentTarget.style.display = 'none'}
+                          />
+                        ) : (
+                          <div className="w-8 h-8 shrink-0 bg-slate-200 rounded flex items-center justify-center text-xs font-bold text-slate-500">
+                            {channel.name.charAt(0)}
+                          </div>
+                        )}
+                        <span className="font-semibold text-sm truncate text-black">{channel.name}</span>
+                      </div>
+                      
+                      {isMounted && (
+                        <button 
+                          onClick={(e) => toggleFavorite(e, channel.id)}
+                          className={`text-lg leading-none transition-colors shrink-0 ${
+                            isFavorite ? "text-red-500 hover:text-red-600" : "text-slate-300 hover:text-slate-400"
+                          }`}
+                        >
+                          {isFavorite ? '♥' : '♡'}
+                        </button>
+                      )}
+                    </div>
+                    
+                    <div className="flex justify-between items-center mt-3 pointer-events-none gap-2">
+                      <div className="flex gap-1 items-center flex-wrap">
+                        <span className={`text-[9px] px-2 py-0.5 rounded font-medium ${isActive ? "bg-black text-white" : "bg-slate-100 text-black"}`}>
+                          {channel.category}
+                        </span>
+                        
+                        {channel.languages[0] && channel.languages[0] !== "Unknown" && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded border border-slate-200 text-black">
+                            {channel.languages[0]}
+                          </span>
+                        )}
+
+                        {channel.subdivision && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded border border-slate-300 text-black">
+                            📍 {channel.subdivision}
+                          </span>
+                        )}
+
+                        {channel.quality && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded font-bold border border-slate-300 text-black">
+                            {channel.quality}
+                          </span>
+                        )}
+                      </div>
+                      
+                      <span className="text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5 shrink-0 text-black">
+                        {channel.country !== "GLOBAL" ? (
+                          <img src={`https://flagcdn.com/w20/${channel.country.toLowerCase()}.png`} alt={channel.country} className="w-4 h-3 rounded-[2px] shadow-[0_0_2px_rgba(0,0,0,0.2)] object-cover" />
+                        ) : (
+                          <span className="text-sm leading-none">🌐</span>
+                        )}
+                        {channel.country}
+                      </span>
+                    </div>
                   </div>
+                );
+              })}
+              
+              {hasMoreChannels && (
+                <div className="py-4 flex justify-center">
+                  <button 
+                    onClick={() => setVisibleCount((prev) => prev + 100)}
+                    className="px-5 py-2.5 text-xs font-bold text-black bg-white border border-slate-300 hover:bg-slate-100 rounded-xl transition-all w-full flex justify-center items-center gap-2"
+                  >
+                    Load More Channels <span className="bg-slate-200 text-black px-2 py-0.5 rounded-md text-[10px]">{filteredChannels.length - visibleCount} left</span>
+                  </button>
                 </div>
-              );
-            })
+              )}
+            </>
           ) : (
             <div className="text-center text-xs text-slate-400 py-8 font-medium">No channels found</div>
           )}
@@ -153,16 +272,54 @@ export default function Dashboard({ initialChannels }: DashboardProps) {
         <div className="w-full max-w-4xl space-y-6">
           {activeChannel ? (
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-brand-indigo bg-indigo-50 px-2.5 py-1 rounded-md">
-                  {activeChannel.category}
-                </span>
-                <h2 className="text-xl font-bold mt-2 text-slate-900">{activeChannel.name}</h2>
-                <p className="text-sm text-slate-400 mt-0.5 font-bold">Country: {activeChannel.country}</p>
+              <div className="flex items-center gap-4">
+                {activeChannel.logo && (
+                  <img src={activeChannel.logo} alt={activeChannel.name} className="w-16 h-16 object-contain bg-slate-50 border border-slate-100 rounded-lg p-1 shrink-0" onError={(e) => e.currentTarget.style.display = 'none'} />
+                )}
+                <div>
+                  <div className="flex gap-2 items-center">
+                    <span className="text-xs font-bold uppercase tracking-wider text-black bg-slate-100 px-2.5 py-1 rounded-md" title={activeChannel.categoryDescription || ""}>
+                      {activeChannel.category}
+                    </span>
+                    <span className="text-xs text-black bg-slate-100 px-2 py-1 rounded-md font-medium">
+                      🗣️ {activeChannel.languages.join(", ")}
+                    </span>
+                    {activeChannel.subdivision && (
+                       <span className="text-xs font-bold text-black bg-slate-100 border border-slate-200 px-2 py-1 rounded-md">
+                         📍 {activeChannel.subdivision}
+                       </span>
+                    )}
+                    {/* Resolusi Video Atas Player */}
+                    {activeChannel.quality && (
+                       <span className="text-xs font-bold text-white bg-black px-2 py-1 rounded-md">
+                         {activeChannel.quality}
+                       </span>
+                    )}
+                  </div>
+                  
+                  <h2 className="text-xl font-bold mt-2 text-black">{activeChannel.name}</h2>
+                  
+                  <div className="text-sm text-slate-500 mt-1 font-bold flex items-center gap-2">
+                    Country: 
+                    {activeChannel.country !== "GLOBAL" ? (
+                      <img src={`https://flagcdn.com/w40/${activeChannel.country.toLowerCase()}.png`} alt={activeChannel.country} className="w-5 h-auto rounded-[3px] shadow-[0_0_3px_rgba(0,0,0,0.2)]" />
+                    ) : (
+                      <span className="text-lg leading-none">🌐</span>
+                    )}
+                    {activeChannel.countryName}
+                  </div>
+                </div>
               </div>
-              <div className="bg-black rounded-xl overflow-hidden shadow-inner">
+
+              <div className="bg-black rounded-xl overflow-hidden shadow-inner mt-4">
                 <VideoPlayer url={activeChannel.streamUrl} />
               </div>
+              
+              <EpgPanel 
+                channelName={activeChannel.name} 
+                epgUrl={activeChannel.epgUrl} 
+                epgSiteId={activeChannel.epgSiteId} 
+              />
             </div>
           ) : (
             <div className="w-full aspect-video bg-white rounded-2xl border border-dashed border-slate-300 flex items-center justify-center text-slate-400 font-medium">
