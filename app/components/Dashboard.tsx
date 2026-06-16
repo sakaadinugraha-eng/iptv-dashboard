@@ -97,10 +97,8 @@ export default function Dashboard({ initialChannels }: DashboardProps) {
   const hasMoreChannels = visibleCount < filteredChannels.length;
 
   return (
-    // PERUBAHAN: flex-col untuk HP, md:flex-row untuk Laptop
     <div className="flex flex-col md:flex-row h-screen w-screen overflow-hidden bg-slate-100 font-sans text-black">
       
-      {/* SIDEBAR: order-2 (di bawah) saat di HP, order-1 (di kiri) saat di Laptop */}
       <aside className="order-2 md:order-1 w-full md:w-[22rem] md:min-w-[22rem] h-[60%] md:h-full bg-white md:border-r border-t md:border-t-0 border-slate-200 flex flex-col z-10 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] md:shadow-none">
         <div className="p-3 md:p-5 border-b border-slate-200 bg-white space-y-2 md:space-y-3 shrink-0">
           <div>
@@ -270,7 +268,6 @@ export default function Dashboard({ initialChannels }: DashboardProps) {
         </div>
       </aside>
 
-      {/* MAIN CONTENT (VIDEO): order-1 (di atas) saat di HP, order-2 (di kanan) saat di Laptop */}
       <main className="order-1 md:order-2 flex-1 w-full md:flex-1 h-[40%] md:h-full flex flex-col overflow-y-auto bg-slate-100 p-3 md:p-8 justify-start items-center">
         <div className="w-full max-w-4xl space-y-4 md:space-y-6">
           {activeChannel ? (

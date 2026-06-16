@@ -64,7 +64,6 @@ interface ApiCategory {
   description: string;
 }
 
-// Interface baru untuk Guides API
 interface ApiGuide {
   channel: string;
   site_id: string;
@@ -183,7 +182,6 @@ export async function getChannels(customStreamsUrl?: string): Promise<TVChannel[
       }
     });
 
-    // PERUBAHAN: Menyimpan informasi jadwal tayangan
     const guideMap = new Map<string, { siteId: string, url: string }>();
     guidesData?.forEach((guide) => {
       if (guide.channel && guide.site_id && guide.sources?.[0]?.url) {

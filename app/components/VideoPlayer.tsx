@@ -68,7 +68,6 @@ export default function VideoPlayer({ url }: VideoPlayerProps) {
         className="w-full h-full object-contain"
       />
       
-      {/* DIPERBARUI: Dibuat selalu tampil (tanpa efek hover) agar bisa di-tap di HP */}
       {levels.length > 1 && (
         <div className="absolute top-2 right-2 md:top-4 md:right-4 z-10 bg-white p-1.5 rounded-md flex items-center gap-1.5 shadow-md border border-slate-200">
           <label className="text-[9px] md:text-[10px] font-bold uppercase tracking-wider text-black">Quality:</label>
