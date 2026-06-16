@@ -110,7 +110,7 @@ export async function getChannels(customStreamsUrl?: string): Promise<TVChannel[
     const categoriesUrl = 'https://iptv-org.github.io/api/categories.json';
     const guidesUrl = 'https://iptv-org.github.io/api/guides.json'; // URL Guides
 
-    const fetchOptions: RequestInit = { cache: 'no-store' };
+    const fetchOptions: RequestInit = { cache: 'force-cache' };
 
     const [
       channelsRes, countriesRes, streamsRes, blocklistRes, 
