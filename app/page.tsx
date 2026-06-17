@@ -1,8 +1,18 @@
-import { getChannels } from './lib/iptv';
+import { getIptvOrgChannels, getFreeTvChannels } from './lib/iptv';
 import Dashboard from './components/Dashboard';
 
 export default async function Home() {
-  const channels = await getChannels();
+  const [iptvOrgData, freeTvData] = await Promise.all([
+    getIptvOrgChannels(),
+    getFreeTvChannels()
+  ]);
 
-  return <Dashboard initialChannels={channels} />;
+  return (
+    <main className="w-screen h-screen overflow-hidden bg-slate-100 text-black">
+      <Dashboard 
+        iptvOrgChannels={iptvOrgData} 
+        freeTvChannels={freeTvData} 
+      />
+    </main>
+  );
 }

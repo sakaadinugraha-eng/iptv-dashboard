@@ -1,3 +1,5 @@
+import parser from 'iptv-playlist-parser';
+
 export interface TVChannel {
   id: string;
   name: string;
@@ -97,7 +99,7 @@ function inferRegion(channelName: string, countryCode: string, apiSubdivision: s
   return null;
 }
 
-export async function getChannels(customStreamsUrl?: string): Promise<TVChannel[]> {
+export async function getIptvOrgChannels(customStreamsUrl?: string): Promise<TVChannel[]> {
   try {
     const defaultChannelsUrl = 'https://iptv-org.github.io/api/channels.json';
     const countriesUrl = 'https://iptv-org.github.io/api/countries.json';
@@ -107,7 +109,7 @@ export async function getChannels(customStreamsUrl?: string): Promise<TVChannel[
     const languagesUrl = 'https://iptv-org.github.io/api/languages.json';
     const subdivisionsUrl = 'https://iptv-org.github.io/api/subdivisions.json';
     const categoriesUrl = 'https://iptv-org.github.io/api/categories.json';
-    const guidesUrl = 'https://iptv-org.github.io/api/guides.json'; // URL Guides
+    const guidesUrl = 'https://iptv-org.github.io/api/guides.json'; 
 
     const fetchOptions: RequestInit = { cache: 'force-cache' };
 
@@ -123,7 +125,7 @@ export async function getChannels(customStreamsUrl?: string): Promise<TVChannel[
       fetch(languagesUrl, fetchOptions),
       fetch(subdivisionsUrl, fetchOptions),
       fetch(categoriesUrl, fetchOptions),
-      fetch(guidesUrl, fetchOptions) // Fetch Guides
+      fetch(guidesUrl, fetchOptions) 
     ]);
 
     const failedResponses = [
@@ -147,7 +149,7 @@ export async function getChannels(customStreamsUrl?: string): Promise<TVChannel[
       languagesRes.json() as Promise<ApiLanguage[]>,
       subdivisionsRes.json() as Promise<ApiSubdivision[]>,
       categoriesRes.json() as Promise<ApiCategory[]>,
-      guidesRes.json() as Promise<ApiGuide[]> // Data Guides
+      guidesRes.json() as Promise<ApiGuide[]> 
     ]);
 
     const languageMap = new Map<string, string>();
@@ -254,7 +256,63 @@ export async function getChannels(customStreamsUrl?: string): Promise<TVChannel[
 
     return [...indonesianChannels, ...globalChannels];
   } catch (error) {
-    console.error('Error fetching IPTV data:', error);
+    console.error('Error fetching IPTV-Org data:', error);
+    return [];
+  }
+}
+
+export async function getFreeTvChannels(): Promise<TVChannel[]> {
+  try {
+    const fetchOptions: RequestInit = { cache: 'force-cache' };
+    const response = await fetch('https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8', fetchOptions);
+    
+    if (!response.ok) {
+        throw new Error(`Failed to fetch Free TV playlist (${response.status})`);
+    }
+
+    const m3uText = await response.text();
+    const parsed = parser.parse(m3uText);
+
+    return parsed.items.map((item, index) => {
+      const nameUpper = (item.name || "").toUpperCase();
+      const groupTitle = item.group.title || 'Global';
+
+      let quality = null;
+      if (nameUpper.includes("1080P") || nameUpper.includes("FHD")) quality = "FHD";
+      else if (nameUpper.includes("720P") || nameUpper.includes("HD")) quality = "HD";
+
+      let guessedCategory = 'General';
+      if (nameUpper.includes('SPORT') || nameUpper.includes('ESPN') || nameUpper.includes('BEIN')) guessedCategory = 'Sports';
+      else if (nameUpper.includes('KIDS') || nameUpper.includes('CARTOON') || nameUpper.includes('NICKELODEON')) guessedCategory = 'Kids';
+      else if (nameUpper.includes('NEWS') || nameUpper.includes('BERITA')) guessedCategory = 'News';
+      else if (nameUpper.includes('MUSIC') || nameUpper.includes('MTV')) guessedCategory = 'Music';
+      else if (nameUpper.includes('MOVIE') || nameUpper.includes('CINEMA') || nameUpper.includes('FILM')) guessedCategory = 'Movies';
+      else if (nameUpper.includes('RELIGION') || nameUpper.includes('ISLAM') || nameUpper.includes('DAKWAH')) guessedCategory = 'Religious';
+
+      const isIndonesia = groupTitle.toLowerCase().includes('indonesia') || nameUpper.includes('INDONESIA');
+
+      return {
+        id: `freetv-${index}`,
+        name: item.name || 'Unknown Channel',
+        logo: item.tvg.logo || null,
+        
+        country: isIndonesia ? 'ID' : 'GLOBAL', 
+        countryName: groupTitle, 
+        countryFlag: isIndonesia ? '🇮🇩' : '🌐',
+        
+        category: guessedCategory, 
+        categoryDescription: null,
+        streamUrl: item.url,
+        quality: quality,
+        
+        languages: isIndonesia ? ['Indonesian'] : ['Unknown'], 
+        subdivision: null,
+        epgUrl: item.tvg.url || null,
+        epgSiteId: item.tvg.id || null,
+      };
+    }).filter(ch => ch.streamUrl !== ""); 
+  } catch (error) {
+    console.error("Error fetching Free TV data:", error);
     return [];
   }
 }

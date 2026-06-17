@@ -15,12 +15,17 @@ const FILTER_PRESETS = [
 ];
 
 interface DashboardProps {
-  initialChannels: TVChannel[];
+  iptvOrgChannels: TVChannel[];
+  freeTvChannels: TVChannel[];
 }
 
-export default function Dashboard({ initialChannels }: DashboardProps) {
+export default function Dashboard({ iptvOrgChannels, freeTvChannels }: DashboardProps) {
+  const [activeSource, setActiveSource] = useState<'IPTV-ORG' | 'FREE-TV'>('IPTV-ORG');
+  
+  const currentChannelsData = activeSource === 'IPTV-ORG' ? iptvOrgChannels : freeTvChannels;
+
   const [activeChannel, setActiveChannel] = useState<TVChannel | null>(
-    initialChannels.length > 0 ? initialChannels[0] : null
+    currentChannelsData.length > 0 ? currentChannelsData[0] : null
   );
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
@@ -44,6 +49,18 @@ export default function Dashboard({ initialChannels }: DashboardProps) {
     setVisibleCount(100);
   }, [searchQuery, selectedCategory, selectedPreset, selectedLanguage]);
 
+  useEffect(() => {
+    if (currentChannelsData.length > 0) {
+      setActiveChannel(currentChannelsData[0]);
+    } else {
+      setActiveChannel(null);
+    }
+    setSearchQuery("");
+    setSelectedCategory("All");
+    setSelectedPreset("All");
+    setSelectedLanguage("All");
+  }, [activeSource, currentChannelsData]);
+
   const toggleFavorite = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     let newFavorites = favorites.includes(id) ? favorites.filter((favId) => favId !== id) : [...favorites, id];
@@ -53,7 +70,7 @@ export default function Dashboard({ initialChannels }: DashboardProps) {
 
   const languagesList = useMemo(() => {
     const set = new Set<string>();
-    initialChannels.forEach((channel) => {
+    currentChannelsData.forEach((channel) => {
       if (Array.isArray(channel.languages)) {
         channel.languages.forEach((lang) => {
           if (lang && lang !== "Unknown") set.add(lang);
@@ -61,21 +78,21 @@ export default function Dashboard({ initialChannels }: DashboardProps) {
       }
     });
     return ["All", ...Array.from(set).sort()];
-  }, [initialChannels]);
+  }, [currentChannelsData]);
 
   const categoriesMap = useMemo(() => {
     const map = new Map<string, string | null>();
-    initialChannels.forEach((channel) => {
+    currentChannelsData.forEach((channel) => {
       if (channel.category && !map.has(channel.category)) {
         map.set(channel.category, channel.categoryDescription);
       }
     });
     const sortedKeys = Array.from(map.keys()).sort();
     return [{ name: "All", description: "Show all channels" }, ...sortedKeys.map(key => ({ name: key, description: map.get(key) }))];
-  }, [initialChannels]);
+  }, [currentChannelsData]);
 
   const filteredChannels = useMemo(() => {
-    return initialChannels.filter((channel) => {
+    return currentChannelsData.filter((channel) => {
       if (channel.name.toUpperCase().startsWith("[DANA KHUSUS]")) return false;
 
       const matchesSearch = channel.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -91,7 +108,7 @@ export default function Dashboard({ initialChannels }: DashboardProps) {
 
       return matchesSearch && matchesCategory && matchesPreset && matchesLanguage;
     });
-  }, [initialChannels, searchQuery, selectedCategory, selectedPreset, selectedLanguage, favorites]);
+  }, [currentChannelsData, searchQuery, selectedCategory, selectedPreset, selectedLanguage, favorites]);
 
   const displayChannels = filteredChannels.slice(0, visibleCount);
   const hasMoreChannels = visibleCount < filteredChannels.length;
@@ -108,6 +125,18 @@ export default function Dashboard({ initialChannels }: DashboardProps) {
             <p className="text-[10px] md:text-xs text-slate-500 mt-1 font-medium">
               Showing {displayChannels.length} of {filteredChannels.length} Channels
             </p>
+          </div>
+
+          <div className="flex flex-col gap-1 mb-1">
+            <label className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-wider">Data Source Server</label>
+            <select
+              value={activeSource}
+              onChange={(e) => setActiveSource(e.target.value as 'IPTV-ORG' | 'FREE-TV')}
+              className="w-full px-2 py-2 text-xs md:text-sm font-bold bg-slate-100 border border-slate-300 rounded-lg focus:outline-none focus:border-slate-400 text-black cursor-pointer shadow-sm"
+            >
+              <option value="IPTV-ORG">IPTV-Org Database (Comprehensive)</option>
+              <option value="FREE-TV">Free-TV M3U (High Quality)</option>
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -273,7 +302,6 @@ export default function Dashboard({ initialChannels }: DashboardProps) {
           {activeChannel ? (
             <div className="bg-white p-3 md:p-6 rounded-xl md:rounded-2xl shadow-sm border border-slate-200/80 space-y-3 md:space-y-4">
               
-              {/* Tampilan Player Video dinaikkan agar langsung terlihat di HP */}
               <div className="bg-black rounded-lg md:rounded-xl overflow-hidden shadow-inner w-full">
                 <VideoPlayer url={activeChannel.streamUrl} />
               </div>
